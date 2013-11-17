@@ -4,7 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include <errno.h>
-#include <time.h>
+#include <unistd.h>
 #include <signal.h>
 #include <gps.h>
 #include <curl/curl.h>
@@ -14,15 +14,8 @@ enum deg_str_type { deg_dd, deg_ddmm, deg_ddmmss };
 
 static struct gps_data_t gpsdata;
 
-static size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream);
 static void get_google_maps_image_from_coordinates(double latitude, double longitude, int zoom_level, int width, int height, const char *out_file);
 static void die(int reason);
-
-static size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream)
-{
-	int written = fwrite(ptr, size, nmemb, (FILE *)stream);
-	return written;
-}
 
 static void get_google_maps_image_from_coordinates(double latitude, double longitude, int zoom_level, int width, int height, const char *out_file)
 {
@@ -99,11 +92,11 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "Timed out.\n");
 				die(-1);
 		} else {
-				errno = 0;
-				if (gps_read(&gpsdata) == -1) {
+			errno = 0;
+			if (gps_read(&gpsdata) == -1) {
 				fprintf(stderr, "Error: couldn't read.\n");
 				die(-2);
-				} else {
+			} else {
 				int fix_mode = gpsdata.fix.mode;
 				if (fix_mode == MODE_NO_FIX || fix_mode == MODE_NOT_SEEN) {
 					fprintf(stderr, "No fix.\n");
@@ -120,7 +113,7 @@ int main(int argc, char *argv[])
 					/* Not using this right now because it is broken. */
 //					fprintf(stdout, "Fix mode: %d\n\t Lat: %s %c\n\t Long: %s %c\n", fix_mode, deg_to_str(deg_dd, fabs(latitude)),
 //		       				(latitude < 0) ? 'S' : 'N', deg_to_str(deg_dd, fabs(longitude)), (longitude < 0) ? 'W' : 'E');
-					}
+				}
 			}
 		}
 
