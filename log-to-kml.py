@@ -14,7 +14,6 @@ with open(in_file) as file:
 		data.append(group)
 
 path = kml.newlinestring(name = "Flight", description = in_file, coords = data)
-path.coords = data
 
 kml.save(out_file)
 
