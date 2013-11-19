@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from simplekml import Kml
 import sys
 

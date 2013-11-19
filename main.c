@@ -133,8 +133,12 @@ int main(int argc, char *argv[])
 					/* Get the Google Static map. */
 					get_google_maps_image_from_coordinates(latitude, longitude, 17, 320, 240, "map.png");
 
-					/* Write data to the log file. */
-					fprintf(log_file, "%f,%f,%f,%f,%f\n", latitude, longitude, gpsdata.fix.altitude, gpsdata.fix.speed, gpsdata.fix.climb);
+					/*
+					 * Write data to the log file.
+					 * The idiots at Google thought that being hipsters was a good idea and asking for "longitude, latitude" was better
+					 * than using the widely accepted "latitude, longitude" format. Fuckers.
+					 */
+					fprintf(log_file, "%f,%f,%f,%f,%f\n", longitude, latitude, gpsdata.fix.altitude, gpsdata.fix.speed, gpsdata.fix.climb);
 
 					/* Not using this right now because it is broken. */
 //					fprintf(stdout, "Fix mode: %d\n\t Lat: %s %c\n\t Long: %s %c\n", fix_mode, deg_to_str(deg_dd, fabs(latitude)),
