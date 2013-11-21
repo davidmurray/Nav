@@ -110,12 +110,14 @@ int main(int argc, char *argv[])
 		die(-1);
 	}
 
+	/* Write initial information in the log. */
+	fprintf(log_file, "// Log format: longitude, latitude, altitude, speed, climb\n");
+
 	while (1) {
 		if (!gps_waiting(&gpsdata, 500000)) {
 			fprintf(stderr, "Timed out.\n");
 				die(-1);
 		} else {
-			errno = 0;
 			if (gps_read(&gpsdata) == -1) {
 				fprintf(stderr, "Error: couldn't read.\n");
 				die(-2);
@@ -147,7 +149,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		sleep(2);
+		sleep(1);
 	}
 
 	return 0;
