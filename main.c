@@ -7,6 +7,10 @@
 #include <errno.h>
 #include <unistd.h>
 #include <signal.h>
+#include <linux/fb.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
 #include <gps.h>
 #include <curl/curl.h>
 #include "wand/MagickWand.h"
@@ -23,35 +27,73 @@ static FILE *log_file;
 static MagickWand *wand;
 static DrawingWand *drawing_wand;
 static PixelWand *pixel_wand;
+static struct fb_var_screeninfo vinfo;
+static struct fb_fix_screeninfo finfo;
+static long int screen_size;
+static char *fb;
 
+static int setup_framebuffer(char *framebuffer);
 static int blit_png_at_path_to_framebuffer(char *path, char *framebuffer);
 static int draw_error_image_with_text(char *text, char *file_path);
 static int get_google_maps_image_from_coordinates(double latitude, double longitude, int zoom_level, int width, int height, const char *file_path);
 static void signal_handler(int signal);
 static void die(int reason);
 
-static int blit_png_at_path_to_framebuffer(char *path, char *framebuffer)
+static int setup_framebuffer(char *framebuffer)
 {
-	unsigned width, height, x, y;
-	unsigned char *image;
-	int ret = 0;
-	FILE *fb;
+	int fd = 0, ret = 0;
 
-	fb = fopen(framebuffer, "w");
-	if (!fb) {
+	/* Get the framebuffer. */
+	fd = open(framebuffer, O_RDWR);
+	if (fd == -1) {
 		fprintf(stderr, "Couldn't open %s.", framebuffer);
+		ret = -4;
+		goto out;
+	}
+
+	if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1) {
+		fprintf(stderr, "Couldn't use ioctl to get FBIOGET_FSCREENINFO.");
+		ret = -3;
+		goto out;
+	}
+
+	if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) == -1) {
+        	fprintf(stderr, "Couldn't use ioctl to get FBIOGET_VSCREENINFO.");
 		ret = -2;
 		goto out;
 	}
 
-	if (lodepng_decode_file(&image, &width, &height, path, LCT_RGB, 16) > 0) {
-		fprintf(stderr, "Couldn't decode PNG.");
+	screen_size = vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8;
+
+	/* Map it. */
+	fb = (char *)mmap(0, screen_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
+	if ((int)fb == -1) {
+		fprintf(stderr, "Couldn't map the framebuffer.");
 		ret = -1;
 		goto out;
 	}
 
+out:
+	close(fd);
+
+	return ret;
+}
+
+static int blit_png_at_path_to_framebuffer(char *path, char *framebuffer)
+{
+	unsigned width, height, x, y, location;
+	unsigned char *image;
+
+	if (lodepng_decode_file(&image, &width, &height, path, LCT_RGB, 16) > 0) {
+		fprintf(stderr, "Couldn't decode PNG.");
+		return -1;
+	}
+
 	for (y = 0; y < height; y++) {
 		for (x = 0; x < width; x++) {
+			location = (x + vinfo.xoffset) * (vinfo.bits_per_pixel / 8) + (y + vinfo.yoffset) * finfo.line_length;
+
 			uint8_t *pix = image + (6 * width * y) + (6 * x);
 			uint16_t r = pix[1] << 0 | pix[0] << 8;
 			uint16_t g = pix[3] << 0 | pix[2] << 8;
@@ -61,13 +103,11 @@ static int blit_png_at_path_to_framebuffer(char *path, char *framebuffer)
 			pixel |= (r & 0xF800);
 			pixel |= ((g & 0xFC00) >> 5);
 			pixel |= ((b & 0xF800) >> 11);
-			fwrite(&pixel, 1, sizeof(pixel), fb);
+			*((unsigned short int *)(fb + location)) = pixel;
 		}
 	}
-out:
-	fclose(fb);
 
-	return ret;
+	return 0;
 }
 
 static int draw_error_image_with_text(char *text, char *file_path)
@@ -137,9 +177,6 @@ static int get_google_maps_image_from_coordinates(double latitude, double longit
 	/* Set the URL. */
 	curl_easy_setopt(curl, CURLOPT_URL, URL);
 
-	/* Tell curl to send data to the write_data function. */
-//	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, fwrite);
-
 	file = fopen(file_path, "wb");
 	if (!file) {
 		fprintf(stderr, "Couldn't open %s\n", file_path);
@@ -197,6 +234,9 @@ static void die(int reason)
 		DestroyPixelWand(pixel_wand);
 	}
 
+	/* Cleanup framebuffer. */
+	munmap(fb, screen_size);
+
 	fprintf(stderr, "Exiting: %d\n", reason);
 
 	exit(reason);
@@ -207,6 +247,13 @@ int main(int argc, char *argv[])
 	/* Set up signal handlers. */
 	signal(SIGINT, signal_handler);
 	signal(SIGHUP, signal_handler);
+
+	/* Set up the framebuffer. */
+	int ret = setup_framebuffer("/dev/fb1");
+	if (ret < 0) {
+		fprintf(stderr, "setup_framebuffer failed.");
+		die(-3);
+	}
 
 	/* Open the stream to gpsd. */
 	if (gps_open(NULL, NULL, &gpsdata) != 0) {
