@@ -331,9 +331,7 @@ int main(int argc, char *argv[])
                                   	}
 
 					/*
-					 * Write data to the log file.
-					 * The idiots at Google thought that being hipsters was a good idea and asking for "longitude, latitude" was better
-					 * than using the widely accepted "latitude, longitude" format. Fuckers.
+					 * Write data to the log file..
 					 */
 					fprintf(log_file, "%f,%f,%f,%f,%f\n", longitude, latitude, gpsdata.fix.altitude, gpsdata.fix.speed, gpsdata.fix.climb);
 
